@@ -239,4 +239,263 @@ Miss values in Time Sereis is more complex because values between consecutive pe
         * AIC
         * BIC
     * residual should be white noise
+
 ## AR Model: AutoRegression
+* What is AR Model?
+    * a linear model, where current period values are a sum of past outcomes multiplied by a numeric factor
+    * ![equation](https://latex.codecogs.com/gif.latex?x_{t}&space;=&space;C&space;&plus;&space;\varphi&space;x_{t-1}&space;&plus;&space;\varepsilon&space;_{t})
+        * ![equation](https://latex.codecogs.com/gif.latex?x_{t-1}) value of x during previous period
+        * ![equation](https://latex.codecogs.com/gif.latex?\varphi) any numeric constant by which multiply the lagged variable
+        * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t-1}) unpredictable shocks
+* AR(p)
+* How to determine p? 
+    * ACF: 
+        * captures both direct and indirect effect of previous values has on current value
+        * model should include past lags which have direct significant effect on present → how? PACF
+        ```python
+        from statsmodels.graphics.tsaplots import sgt
+        sgt.plot_acf(df['col1'], lags=40, zero=False)
+        ```
+    * PACF
+
+
+        ```python
+        from statsmodels.graphics.tsaplots import sgt
+        sgt.plot_pacf(df['col1'], lags=40, zero=False, method='ols)
+        ```
+* AR(1) model with Python
+
+    ```python
+    import statsmodels.graphics.tsaplots as sgt
+    from statsmodels.tsa.arima_model import ARMA
+    # AR(1) model
+    model_ar = ARMA(df.market_value, order=(1,0)) 
+    # 1 indicates taking lagged 1 for auto regression. 
+    # 0 indicates not taking residuals into consideration
+
+    # Fit the model
+    model_ar.fit()
+
+    # View model summary
+    model_ar.summary()
+
+    # Keys summary parameters:
+    # Statistical H0: constant or parameter = 0 
+    # z statistics
+    # p value: how strong evidence support H0
+    ```
+* AR(p) model with Python Log-likelihood ratio test
+    * What is log likelihood of data?
+        * the logarithm of the probability of the observed data coming from the estimated model. For given number of (p, d, q), maximize log likelihood to find paratmer estimates
+        * Information Criteria
+    * Statistical test: H0: AR(1) and AR(2) are the same
+
+        ```python
+        def LLR_test(model1, model2, DF=1):
+            from scipy.stats.distributions import chi2
+            L1 = model1.fit().llf
+            L2 = model2.fit().llf
+            LR = (L2-L1)*2
+            p = chi2.sf(LR, DF).round(3)
+            return p
+        # returns the p-values of LLR test
+        # p value shows how strong the evidence support the H0 (two models are the same)
+        # small p value (<0.05) shows there is a significant difference between the two models
+        ```
+* Iimiations of AR model:
+    * AR model assumes the time series is stationary
+    * AR model predict poorly if data is non-staionary
+    * How to determine if time series is stationary? → Dickey Fuller test
+    * Dickey Fuller Test H0: data is non-stionary, compare p-value with significance level
+    * If p value of DF test is high, then data is non stationary. Cannot use AR model
+    * Transform non-stationary to stationary
+    * Examples
+
+        ```python
+        # pandas provides a method .pct_change() to calculate percentage change between two consecutive values
+        df['returns']= df['col1'].pct_change(1).mul(100)
+        # 1 is the distance in time between the periods to compare
+        # Returns 0.02 for 2%
+        # to update the output to percentage format, use .mul(100), result will be 0.002 →2
+        df = df.iloc[1:] # remove the first data, since it has no return (null)
+        # run Dicky Fuller test on returns
+        sts.adfuller(df['returns])
+        ```
+* Take stock prices as example
+    * returns (percentage change between lagged period) is preferred than prices because of non stationary nature of prices.
+    * normalized returns is preferred
+        * normalzied returns account for absolute profitability of investment in contrast to prices
+        * normalized returns allow to compare the relative profitability as opposed to non-normalized returns
+* Normalization in AR model
+    * ![equation](https://latex.codecogs.com/gif.latex?x_{t}&space;\rightarrow&space;%&space;of&space;x_{1})
+    * Steps
+        1. Set benchmark, usually the first value in series
+        2. Divide the series by benchmark
+
+        ```python
+        benchmark = df['col1'].iloc[0]
+        df['norm'] = df['col1'].div(benchmark).mul(100)
+        sts.adfuller(df['norm']) # Test the generated series is stationary or not. H0: non-stationary 
+        ```
+    * **useing normalized values has no effect on model selection**
+* Residuals of AR model
+    * Why?
+        * If the residual are non random(white noise), then there is a pattern that needs to be accounted for
+    * Summary of residuals
+    * test stationarity
+        * ideally should be random walk process, should be stationary
+    
+        ```python
+        import statsmodels.graphics.tsaplots as sgt
+        from statsmodels.tsa.arima_model import ARMA
+        # AR(1) model
+        model_ar = ARMA(df.market_value, order=(7,0)) 
+        model_ar.fit()
+        model_ar.summary()
+        df['residual'] = model_ar.resid
+
+        # view the mean and variance of residual
+        df['residual'].mean()
+        df['residual'].var()
+
+        # Test if residual is stationary
+        sts.adfuller(df['residual'])
+        ```
+* MA vs. AR
+    * AR Auto regression models rely on past data
+    * MA self - correcting model learn from past residuals, adjust for past shocks quickly
+    * MA good at prediction random walk dataset
+----
+## Moving Average MA Model
+* What is MA model?
+    * ![equation](https://latex.codecogs.com/gif.latex?r_{t}&space;=&space;c&space;&plus;&space;\theta&space;_{1}\varepsilon&space;_{t-1}&space;&plus;\varepsilon&space;_{t})
+    * ![equation](https://latex.codecogs.com/gif.latex?r_{t}) the value of 'r' in current period
+    * ![equation](https://latex.codecogs.com/gif.latex?\theta&space;_{1}) numeric coefficient for value associated with 1st lag
+    * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t}) residual for the current period
+    * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t-1}) residual for the past period
+* MA(1) ~ AR(∞) with certain restriction
+* ACF → MA(q) and PACF → AR(p)
+    * Determine which lagged values have a significant direct effect on the present day ones is not relevant
+* MA(1) model
+    * 
+
+    ```python
+    from statsmodels.tsa.arima_model import ARMA
+    import statsmodel.graphics.tsaplots as sgt
+    model_ret_MA_1 = RMA(df['col1'].iloc[1:], order=(0,1))
+    result_ret_MA_1 = model_ret_MA_1.fit()
+    result_ret_MA_1.summary()
+    ```
+* MA(q) model
+    * How to determin q order? Log likelihood test
+        * LLR test H0: two models are same
+        * LLR test returns p value
+        ```python
+        def LLR_test(model1, model2, DF=1):
+            from scipy.stats.distributions import chi2
+            L1 = model1.fit().llf
+            L2 = model2.fit().llf
+            LR = (L2-L1)*2
+            p = chi2.sf(LR, DF).round(3)
+            return p
+        # returns the p-values of LLR test
+        # p value shows how strong the evidence support the H0 (two models are the same)
+        # small p value (<0.05) shows there is a significant difference between the two models
+        ```
+    * ACF plot
+        * X axis is lagging numbers
+        * Y axis correlation: how significant the lagged values affect present values
+* MA model residuals
+* Normalized values
+    * Normalization won't affect the order of model
+* Features
+    * MA model do not perform well for non stationary data
+    * MA models are great in modelling Random Walks because they take into account errors
+----
+## ARMA Model (p, q)
+* What is ARMA(p, q)?
+    * p: AR(p) lagged values
+    * q: MA(q) lagged errors
+    * Allow AR models to calibrate faster and adjust to some huge shocks
+    * Give MA terms a much better foundation for predictions
+    * ![equation](https://latex.codecogs.com/gif.latex?y_{t}&space;=&space;c&plus;&space;\varphi&space;_{1}y_{t-1}&plus;\theta&space;_{1}\varepsilon&space;_{t-1}&plus;\theta&space;_{t})
+    * ![euqation](https://latex.codecogs.com/gif.latex?y_{t},&space;y_{t-1}):
+        * Values in the current and 1 period ago respectively
+    * ![euqation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t},&space;\varepsilon&space;_{t-1})
+        * Error tems for the same two periods
+    * ![euqation](https://latex.codecogs.com/gif.latex?c)
+        * baseline constant factor
+    * ![euqation](https://latex.codecogs.com/gif.latex?\varphi&space;_{1})
+        * What part of the value last period is relevant in explaining the current one
+    * ![euqation](https://latex.codecogs.com/gif.latex?\theta&space;_{1})
+        * What part of the errorlast period is relevant in explaining the current value
+* ARMA(p,q) model with Python
+    ```python
+    from statsmodels.tsa.arima_model import ARMA
+    import statsmodel.graphics.tsaplots as sgt
+    model_ret_AR_1_MA_1 = RMA(df['col1'].iloc[1:], order=(1,1))
+    result_ret_AR_1_MA_1 = model_ret_AR_1_MA_1.fit()
+    result_ret_AR_1_MA_1.summary()
+    ```
+    * determine which model is better → LLR test
+    ```python
+    LLR_test(model_ret_AR_1, model_ret_AR_1_MA_1, DF=1)
+    LLR_test(model_ret_MA_1, model_ret_AR_1_MA_1, DF=1)
+    # LLR test can only compare nested models
+    # p1+q1 > p2+q2 and p1>=p2 and q1>=q2
+    # If nested not satisfied, need to compare the LogLikelihood and AIC of two models
+    # Higher LogLikelihood and Lower AIC is desired
+    ```    
+* How to find best ARMA model?
+    1. All coefficients significant
+    2. High LogLikelihood
+    3. Low information criteria
+* Residual of ARMA model
+    * steps
+        * analyzing residuals of predictor
+        * extract values and add to dataframe
+        * plot and examine ACF
+
+    ```python
+    from statsmodels.tsa.arima_model import ARMA
+    import statsmodel.graphics.tsaplots as sgt
+    df['res_ret_ar_3_ma_2'] = results_ret_ar_3_ma_2.resid[1:]
+    df.res_ret_ar_3_ma_2.plot(figsize = (20,5))
+    plt.title("Residuals of Returns", size=24)
+    plt.show()
+
+    # Plot ACF and see if the residual is random
+    sgt.plot_acf(df.res_ret_ar_3_ma_2[2:], zero = False, lags = 40)
+    plt.title("ACF Of Residuals for Returns",size=24)
+    plt.show()
+    # ACF plot might show more lagged numbers are relevant/significant than the model used. 
+    # if that is the case, update the model with higher lagged orders
+    ```
+----
+## ARIMA(p, d, q) Model for non-stationary data
+* What is ARIMA(p,d,q)?
+    * d: integration
+    * accounting for non-seasonal difference between periods
+* ARIMA(1,1,1)
+    * ![equation](https://latex.codecogs.com/gif.latex?\Delta&space;P_{t}=c&plus;\varphi_{1}\Delta&space;P_{t-1}&plus;\theta&space;_{1}\varepsilon&space;_{t-1}&plus;\varepsilon&space;_{t})
+    * ![equation](https://latex.codecogs.com/gif.latex?P_{t},P_{t-1})
+        * values in current and 1 lagged periods respectively
+    * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t},\varepsilon&space;_{t-1})
+        * Errors terms for the same two periods
+    * ![equation](https://latex.codecogs.com/gif.latex?c)
+        * Baseline constant factor
+    * ![equation](https://latex.codecogs.com/gif.latex?\varphi_{1})
+        * What part of the value last period is relevant in explaining the current one
+    * ![equation](https://latex.codecogs.com/gif.latex?\theta&space;_{1})
+        * What part of the error last period is relevant in explaining the current value
+    * ![equation](https://latex.codecogs.com/gif.latex?\Delta&space;P&space;_{t})
+        * = ![equation](https://latex.codecogs.com/gif.latex?P&space;_{t}-P&space;_{t-1})
+* ARMIA model is an ARMA(p,q) model for a newly generated time-series
+* INtergration:
+    * loss observations is unavoidable
+* ARIMA Model with Python
+    ```python
+    import statsmodels.graphics.tsaplots as sgt
+    import statsmodels.tsa.stattools as sts
+    from statsmodels.tsa.arima_model import ARIMA    
+    ```
