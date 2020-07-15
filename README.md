@@ -626,3 +626,111 @@ Miss values in Time Sereis is more complex because values between consecutive pe
         * Mean Model
         * Volatility Model
 * GARCH: Generalized Autoregressive Conditional Heteroscedasticiity model
+    * ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;_{t}^{2}=\alpha&space;_{0}&plus;\alpha&space;_{1}\varepsilon&space;_{t-1}^{2}&plus;\sigma&space;_{t-1}^{2})
+    * ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;_{t-1}^{2}) volatility clustering, conditional variance from last period
+    * Violatility is continuous
+    * GARCH Model:
+        * ![equation](https://latex.codecogs.com/gif.latex?VAR(y_{t}|y_{t-1})=\sigma&space;_{t}^{2}=\Omega&space;&plus;\alpha&space;_{1}\varepsilon&space;_{t-1}^{2}&plus;\beta&space;\sigma&space;_{t-1}^{2})
+        * ![equation](https://latex.codecogs.com/gif.latex?VAR(y_{t}|y_{t-1}))
+            * Variance today is conditional on the values of variance yesterday
+        * Ω
+            * Constatnt
+        * ![equation](https://latex.codecogs.com/gif.latex?\alpha&space;_{1})
+            * numeric coefficient for squared residual for past period
+        * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t-1}^{2})
+            * squared residual from last period
+        * β
+            * Numeric coefficient for the conditional variance from last period
+        * ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;_{t-1}^{2})
+            * conditional variance from last period
+* GARCH vs. ARMA
+    * Orders
+        * GARCH(p,q)
+            * q is ARCH order:  ![equation](https://latex.codecogs.com/gif.latex?\alpha&space;_{1}) past squared residuals
+            * p is GARCH order: β past variance
+        * ARMA(p, q)
+            * AR(p): on past values
+            * MA(q): on past residuals
+        * GARCH component p ~ AR(p) on  past values/variance
+        * ARCH component q ~ MA(q) on past residuals
+    * ARMA-GARCH model
+        * mean equation with ARMA: ![equation](https://latex.codecogs.com/gif.latex?\mu&space;_{t}&space;=&space;ARMA(p,q))
+        * variance equation with GARCH: ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;_{t}^{2}&space;=&space;GARCH(p,q))
+        * p,q in two models do not need to match
+* GARCH Model in Python
+    * GARCH(1,1) with serially uncorrelated data. → Mean model doesn't rely on past values or errors → constant mean model
+
+    ```python
+    # GARCH(1,1) on serially uncorrelated mean
+    from arch import arch_model
+    model_garch_1_1 = arch_model(df.returns[1:], mean = "Constant", vol = "GARCH", p = 1, q=1) # p is ARCH order, and q is GARCH order. opsite of the equation!!
+    # setting mean equation: 'Constant' or 'Zero' or "AR" (if "AR", set lags argument = [2,4,6])
+    # dist: probability distributions for error terms
+    # mean of this series is not serially correlated, time-invariant, not related to past values or past residuals
+
+    # setting volatility model: vol = 'GARCH'
+    # specify order: p=1
+    results_arch_1_1 = model_garch_1_1.fit(update_freq = 5)
+    results_arch_1_1.summary()    
+    # including past values as a form of baseline provides much greater accuracy, like from MA to ARMA
+    ```
+    * GARCH(p,q)
+        * NOte no higher order GARCH models outperform the GARCH(1,1) when it comes to the variance of market returns. This is due to the recursive nature in which the past conditional variances are computed. All the effect of conditional variance 2 days ago would be contained in the conditional variance yesterday.
+        * So No need to include more than 1 GARCH compent (p)
+        * in arch_model(), argument p is ARCH component, q is GARCH component. 
+----
+## Model selection with Auto ARIMA
+* Auto ARIMA
+    * How to select? Best model has highest LLF, but Lowest AIC
+    * Pros
+        1. save time
+        2. remove ambiguity
+        3. reduces risk of human error
+    * Cons
+        1. Blindly putting into one criterion
+        2. Never really see how well other models perform
+        3. Topic expertise
+        4. Human error
+* Auto ARIMA in python
+    * commention about using auto arima for model selection
+        * the rule of model selection should be 'rules of thumb' (high LLR, low AIC), rather than fixed
+        * auto arima only considers a single feature -- AIC
+        * Could overfit 
+        * default arguments of auto arima restrict # of AR and MA components
+    ```python
+    from statsmodels.tsa.arima_model import ARIMA
+    from arch import arch_model
+    from pmdarima.arima import auto_arima
+    
+    # create returns
+    df_comp['ret_spx'] = df_comp.spx.pct_change(1)*100
+    df_comp['ret_ftse'] = df_comp.ftse.pct_change(1)*100
+    df_comp['ret_dax'] = df_comp.dax.pct_change(1)*100
+    df_comp['ret_nikkei'] = df_comp.nikkei.pct_change(1)*100
+    # For MAX models, make sure the components are same type of data
+    # that is if the endogenous components is returns, then exogenous components should be returns as well.
+    # Mixing stationary and non-stationary data could lead to some misleading results
+
+
+    # apply auto arima 
+    model_auto = auto_arima(
+                    df.ret_ftse[1:], 
+                    exogenous = df[['ret_spx', 'ret_dax', 'ret_nikkei']][1:], # exogenous -> outside factors (e.g other time series)
+                    m = 5, # seasonal cycle length, 5 business days each week
+                    max_order = None, #  maximum amount of variables to be used in the ARMA regression (p + q)
+                    max_p = 7, # maximum AR components
+                    max_q = 7, # maximum MA components
+                    max_d = 2, # maximum Integrations
+                    max_P = 4, # Seasonal orders
+                    max_Q = 4, # Seasonal orders
+                    max_D = 2, # Seasonal orders
+                    maxiter = 50, # maximum iterations we're giving the model to converge the coefficients (becomes harder as the order increases)
+                    # sometimes complicated models fail to converage. Regressional fails to find a correct solution after a fixed number of attemps
+                    alpha = 0.05, # level of significance, default is 5%, which we should be using most of the time
+                    n_jobs = -1, # how many models to fit at a time (-1 indicates "as many as possible"), might slow down computing
+                    trend = 'ct', # "ct" usually,or array-type 
+                    # using LLR test, need to specify trend
+                    information_criterion = 'oob',#'aic', 'aicc', 'bic', 'hqic', 'oob'. For OOB need to separate data into a sample and out of sample sets
+                    out_of_sample = int(len(df_comp)*0.2))  # validates the model selection (pass the entire dataset, and set 20% to be the out_of_sample_size
+                    # input the full dataset, rather than the train set only. Because auto arima will validate results.
+    ```
