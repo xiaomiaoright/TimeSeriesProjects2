@@ -734,3 +734,15 @@ Miss values in Time Sereis is more complex because values between consecutive pe
                     out_of_sample = int(len(df_comp)*0.2))  # validates the model selection (pass the entire dataset, and set 20% to be the out_of_sample_size
                     # input the full dataset, rather than the train set only. Because auto arima will validate results.
     ```
+----
+## Forecasting
+* Find a pattern(select the correct model) and predict the future
+* Pitfalls/peculiarities
+    * model specific
+    * Data dependent
+* Multvariate Regression Model → vector models
+    * Vector:
+        * every component contains a value for each of the time series
+        ```python
+        from statsmodels.tsa.api import VAR
+        ```
