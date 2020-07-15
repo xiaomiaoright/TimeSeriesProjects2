@@ -498,4 +498,131 @@ Miss values in Time Sereis is more complex because values between consecutive pe
     import statsmodels.graphics.tsaplots as sgt
     import statsmodels.tsa.stattools as sts
     from statsmodels.tsa.arima_model import ARIMA    
+    model_ar_1_i_1_ma_1 = ARIMA(df.market_value, order=(1,1,1))
+    results_ar_1_i_1_ma_1 = model_ar_1_i_1_ma_1.fit()
+    results_ar_1_i_1_ma_1.summary()
+
+
+    df['res_ar_1_i_1_ma_1'] = results_ar_1_i_1_ma_1.resid.iloc[:]
+    sgt.plot_acf(df['res_ar_1_i_1_ma_1'].iloc[1:], zero = False, lags = 40)
+    # ACF plot cannot plot missing values. So first value in the df series need to be dismissed
+    plt.title("ACF Of Residuals for ARIMA(1,1,1)",size=20)
+    plt.show()
     ```
+
+* Test intergrated data stationary
+    ```python
+    df['delta_col'] = df['col1'].diff(1) # take order 1 integration
+
+    sts.adfuller(df['delta_col'].iloc[1:]) # test stationarity, avoid the first missing value
+
+    # create ARIMA model: ARIMA(1,0,1) of integrated col  ~ ARIMA(1,1,1) of Col
+    model_delta_ar_1_i_1_ma_1 = ARIMA(df['delta_col'][1:], order=(1,0,1))
+    results_delta_ar_1_i_1_ma_1 = model_delta_ar_1_i_1_ma_1.fit()
+    results_delta_ar_1_i_1_ma_1.summary()    ```
+
+    * ARMA(p,q) for integrated prices and ARIMA(p,1,q) for prices
+* ARIMA vs ARMA
+    * ARIMA with high order integration
+        * More and more computationally expensive
+        * Transform data serveral times
+        * Differentiate values from zero
+        * Possible to converage
+        * Numberical instability
+        * More layers added, harder to interpret the result
+* ARIMAX model: outside factors
+    * ![equation](https://latex.codecogs.com/gif.latex?\Delta&space;P_{t}&space;=&space;c&space;&plus;&space;\beta&space;X&space;&plus;&space;\varphi&space;_{1}\Delta&space;P_{t-1}&plus;\theta&space;_{1}\varepsilon&space;_{t-1}&space;&plus;\varepsilon&space;_{t})
+    * X: any variables intersted in, exogeneous variables
+    * in ARIMA model, pass argument exog = array_type
+
+    ```python
+    model_ar_1_i_1_ma_1_Xspx = ARIMA(df.market_value, exog = df.spx, order=(1,1,1))
+    results_ar_1_i_1_ma_1_Xspx = model_ar_1_i_1_ma_1_Xspx.fit()
+    results_ar_1_i_1_ma_1_Xspx.summary()
+    ```
+* SARIMAX Model: count for seasonality
+    * SARIMAX(p,d,q)(P,D,Q,s) 
+        * 4 addtiontional orders
+        * first three seasonal variations of arima orders, seasonal(P,D,Q)
+        * the fourth is the length of cycle, if s=1, no seasonality
+    ```python
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+    model_sarimax = SARIMAX(df.market_value, exog = df.spx, order=(1,0,1), seasonal_order = (2,0,1,5))
+    results_sarimax = model_sarimax.fit()
+    results_sarimax.summary()
+    ```
+* Volatility and Prediction Stability
+    * What is volatility?
+        * magnitude of residuals
+        * ~ variance → stability → low risk → safety
+    * How?
+        * Square the residuals
+            * solves positive negative conundrum
+            * penalizes high differences between true values and predictions more
+            * increases the importance of big unpredicted shocks
+----
+## ARCH Model
+* Autoregression Conditional Heteroscedasticity model
+    * Heteroscedasticity: different dispersion (variance)
+    * Conditional: a value dependent on others
+    * autoregression: using past values to measure variance which is conditional of the variance of past periods
+* Simple ARCH model
+    * ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;^{2}) euqation
+    * ![equation](https://latex.codecogs.com/gif.latex?Var(y_{t}|y_{t-1})&space;=&space;\alpha&space;_{0}&space;&plus;\alpha_{1}&space;\varepsilon_{t-1}^{2})
+    * ![equation](https://latex.codecogs.com/gif.latex?Var(y_{t}|y_{t-1})): conditional variance
+    * ![equation](https://latex.codecogs.com/gif.latex?\alpha&space;_{0}): constant factor, ~c
+    * ![equation](https://latex.codecogs.com/gif.latex?\alpha_{1}) : coefficient for first term
+    * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon_{t-1}^{2}): Squared value of the residual epsilon for the previous period
+    * ARCH(q): q orders
+* Volatility
+    * Numeric measurement of uncertainty
+    * not directly observable
+* Mean and Variance equation
+    * ![equation](https://latex.codecogs.com/gif.latex?r_{t}&space;=&space;\mu&space;_{t}&space;&plus;&space;\varepsilon&space;_{t})
+    * ![equation](https://latex.codecogs.com/gif.latex?\sigma&space;{_t^2}&space;=&space;\alpha&space;_{0}&space;&plus;\alpha&space;_{1}\varepsilon&space;_{t-1}^{2})
+    * ![equation](https://latex.codecogs.com/gif.latex?\mu&space;_{t}&space;=&space;C_{0}&space;&plus;\varphi&space;_{1}\mu&space;_{t-1})
+    * ![equation](https://latex.codecogs.com/gif.latex?\varepsilon&space;_{t}): residual values left after estimating the coefficients
+    * ![equation](https://latex.codecogs.com/gif.latex?\mu&space;_{t}): mean, a function of past values and past erros. ARMAX model or constant value depending on the dataset.
+        * assume μ is serially uncorrleated → no time-dependent pattern
+    ```python
+    df['returns'] = df.market_value.pct_change(1)*100
+    df['sq_returns'] = df.returns.mul(df.returns)
+    # Volatility based on sqaured returns
+    df.sq_returns.plot(figsize=(20,5))
+    plt.title("Volatility", size = 24)
+    plt.show()
+
+    # PACF  of return
+    sgt.plot_pacf(df.returns[1:], lags = 40, alpha = 0.05, zero = False , method = ('ols'))
+    plt.title("PACF of Returns", size = 20)
+    plt.show()
+    # PACF of squared returns
+    sgt.plot_pacf(df.sq_returns[1:], lags = 40, alpha = 0.05, zero = False , method = ('ols'))
+    plt.title("PACF of Squared Returns", size = 20)
+    plt.show()
+    ```
+* arch_model() method
+    ```python
+    from arch import arch_model
+    model_arch_1 = arch_model(df.returns[1:], mean = "Constant", vol = "ARCH", p = 1, dist='t') 
+    # setting mean equation: 'Constant' or 'Zero' or "AR" (if "AR", set lags argument = [2,4,6])
+    # dist: probability distributions for error terms
+    # mean of this series is not serially correlated, time-invariant, not related to past values or past residuals
+
+    # setting volatility model: vol = 'ARCH'
+    # specify order: p=1
+    results_arch_1 = model_arch_1.fit(update_freq = 5)
+    results_arch_1.summary()
+    ```
+    * arch model summary
+        * Constant Mean 
+            * r-squared: 
+                * R-squared is a statistical measure of how close the data are to the fitted regression line. It is also known as the coefficient of determination, or the coefficient of multiple determination for multiple regression.
+                * R-squared = Explained variation / Total variation
+                * for constant mean, r-sqaure ~0, because no variance to explain
+            * LogLikelihood:
+                * compare LLR of ARCH Model with ARIMA model, even the simplest ARCH model yields a better estimate than the complex multi-lag ARIMA model
+                * **ARCH can only be used to predict future variance, rather than future returns** ARCH can be used to determine the stability of market, but can not predict if prices will go up or down
+        * Mean Model
+        * Volatility Model
+* GARCH: Generalized Autoregressive Conditional Heteroscedasticiity model
